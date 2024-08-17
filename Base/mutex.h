@@ -12,10 +12,15 @@ class MutexLock : public NonCopyAble {
   MutexLock() {
    pthread_mutex_init(&mutex_, nullptr);
   }
+
   ~MutexLock() {
    pthread_mutex_destroy(&mutex_);
   }
   
+  pthread_mutex_t* pthreadmutex() {
+    return &mutex_;
+  }
+
   bool Lock() {
     return pthread_mutex_lock(&mutex_) == 0;
   }
