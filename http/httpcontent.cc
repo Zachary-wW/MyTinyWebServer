@@ -1,77 +1,59 @@
 #include "httpcontent.h"
 
+#include <algorithm>
+
 #include "httprequest.h"
 #include "httpparsestate.h"
 
 using namespace tiny_muduo;
 
-HttpContent::HttpContent() : checked_index_(0),
-                             parse_state_(kParseRequestLine) {
+HttpContent::HttpContent() : parse_state_(kParseRequestLine) {
 }
 
 HttpContent::~HttpContent() {}
 
-void HttpContent::ParseLine(Buffer* buffer) {
-  line_state_ = kLineMore;
-  if (buffer->readablebytes() == 0) return;
-
-  int readable_index = buffer->readablebytes();
-  const char* buf = buffer->beginread();
-
-  for (; checked_index_ < readable_index; ++checked_index_) {
-    char chr = buf[checked_index_]; 
-    if (chr == '\n') {
-      if (checked_index_ && buf[checked_index_ - 1] == '\r') {
-        checked_index_ = checked_index_ + 1;
-        line_state_ = kLineOK;
-      } else {
-        line_state_ = kLineErrno;
-      }
-      return;
-    } else if (chr == '\r') {
-      if (checked_index_ == readable_index - 1) continue;
-      if (buf[checked_index_ + 1] == '\n') {
-        checked_index_ = checked_index_ + 2;
-        line_state_ = kLineOK;
-      } else { 
-        line_state_ = kLineErrno;
-      }
-      return;
-    } else {
-      continue;
-    }
-  }
-
-  return;
-}
-
 bool HttpContent::ParseContent(Buffer* buffer) {
-  while (parse_state_ != kParseErrno) {
-    ParseLine(buffer);
-
-    if (line_state_ == kLineMore || line_state_ == kLineErrno) { 
-      if (line_state_ == kLineErrno) {
-        parse_state_ = kParseErrno;
-        checked_index_ = 0;
+  bool linemore = true;
+  bool parseok = true;
+  const char* CRLF = nullptr;
+  while (linemore) {
+    CRLF = nullptr;
+    if (parse_state_ == kParseRequestLine) { 
+      CRLF = buffer->FindCRLF(); 
+      if (CRLF) {
+        parseok = request_.ParseRequestLine(buffer->Peek(), CRLF);
+        if (parseok) {
+          parse_state_ = kParseHeaders;
+        } else {
+          linemore = false;
+        }
+      } else {
+        linemore = false;
       }
-      break;
-    }
-
-    const char* start = buffer->beginread();
-    const char* end = start + (checked_index_ - 2);
-
-    if (parse_state_ == kParseRequestLine) {
-      request_.ParseRequestLine(start, end, parse_state_);
     } else if (parse_state_ == kParseHeaders) {
-      request_.ParseHeaders(start, end, parse_state_);
-    } else if (parse_state_ == kParseBody) {
-      request_.ParseBody(start, end, parse_state_);
+      CRLF = buffer->FindCRLF(); 
+      if (CRLF) {
+        const char* colon = std::find((const char*)buffer->Peek(), CRLF, ':');
+        if (colon == CRLF) {
+          parse_state_ = kParseGotCompleteRequest;
+          linemore = false;
+        } else {
+          parseok = request_.ParseHeaders(buffer->Peek(), colon, CRLF);
+          if (!parseok) linemore = false;
+        }
+      } else {
+        linemore = false;
+      }
     } else if (parse_state_ == kParseGotCompleteRequest) {
-      break;
+      linemore = false;
+    } else if (parse_state_ == kParseBody) {
+    
     }
-    buffer->RetrieveUntilIndex(start + checked_index_);
-    checked_index_ = 0;
+
+    if (CRLF) { 
+      buffer->RetrieveUntilIndex(CRLF + 2);
+    }
   }
 
-  return parse_state_ != kParseErrno;
+  return parseok;
 }

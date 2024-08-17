@@ -1,5 +1,7 @@
 #include "httpresponse.h"
 
+#include <stdio.h>
+
 #include <string>
 
 #include "buffer.h"
@@ -8,27 +10,32 @@ using namespace tiny_muduo;
 using std::string;
 
 const string HttpResponse::server_name_ = "Tiny_muduo";
-const string HttpResponse::server_http_version_ = "HTTP/1.1";
 
 void HttpResponse::AppendToBuffer(Buffer* buffer) {
-  string message;
+  char buf[32] = {0};
 
-  message += (server_http_version_ + " " + 
-              std::to_string(status_code_) + " " + 
-              status_message_ + CRLF);
+  snprintf(buf, sizeof(buf), "HTTP/1.1 %d ",status_code_);
+  buffer->Append(buf);
+  buffer->Append(status_message_);
+  buffer->Append(CRLF);
   
   if (close_connection_) {
-    message += ("Connection: close" + CRLF);
+    buffer->Append("Connection: close\r\n");
   } else {
-    message += ("Content-Length: ");
-    message += (std::__cxx11::to_string(body_.size()) + CRLF);
-    message += ("Connection: Keep-Alive" + CRLF);
-    message += ("Content-Type:" + type_ + CRLF);
-    message += ("Server: " + server_name_ + CRLF);
+    snprintf(buf, sizeof(buf), "Content-Length: %zd\r\n", body_.size()); // no need to memset this is longer than HTTP... one
+    buffer->Append(buf);
+    buffer->Append("Connection: Keep-Alive\r\n");
   }
-  message += CRLF;
-  message += body_;
 
-  buffer->Append(message);
+  buffer->Append("Content-Type: ");
+  buffer->Append(type_);
+  buffer->Append(CRLF);
+
+  buffer->Append("Server: ");
+  buffer->Append(server_name_);
+  buffer->Append(CRLF);
+  buffer->Append(CRLF);
+
+  buffer->Append(body_);
   return;
 }

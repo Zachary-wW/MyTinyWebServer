@@ -24,6 +24,7 @@ enum Method {
 };
 
 enum Version {
+  kUnknown,
   kHttp10,
   kHttp11
 };
@@ -35,14 +36,11 @@ class HttpRequest {
 
   bool ParseRequestMethod(const char* start, const char* end);
 
-  void ParseRequestLine(const char* start, const char* end, 
-                    HttpRequestParseState& state);
+  bool ParseRequestLine(const char* start, const char* end);
 
-  void ParseHeaders(const char* start, const char* end,
-                    HttpRequestParseState& state);
+  bool ParseHeaders(const char* start, const char* colon, const char* end);
 
-  void ParseBody(const char* start, const char* end,
-                    HttpRequestParseState& state);
+  bool ParseBody(const char* start, const char* end);
 
   Method method() const { return method_; }
   const string& path() const { return path_; }
@@ -50,20 +48,19 @@ class HttpRequest {
   Version version() const { return version_; }
   const std::map<string, string>& headers() const { return headers_; }
 
+  void Swap(HttpRequest& req);
+
   string GetHeader(const string& header) const {
+    string ret;
     auto iter = headers_.find(header);
-    if (iter == headers_.end()) {
-      return string(); //如果没有找到匹配的元素，函数将返回一个空的string对象。
-    } else {
-      return iter->second;
-    }
+    return iter == headers_.end() ? ret : iter->second;
   }
 
  private:
   Method method_;
+  Version version_;
   string path_;
   string query_;
-  Version version_;
   std::map<string, string> headers_;
 };
 

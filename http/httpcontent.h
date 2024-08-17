@@ -10,12 +10,6 @@
 
 namespace tiny_muduo {
 
-enum HttpRequestParseLine {
-  kLineOK,
-  kLineMore,
-  kLineErrno
-};
-
 class HttpContent {
  public:
   HttpContent();
@@ -27,14 +21,13 @@ class HttpContent {
   
   const HttpRequest& request() const { return request_; }
   void ResetContentState() { 
-    parse_state_ = kParseRequestLine; 
-    line_state_ = kLineOK; 
+    HttpRequest tmp;
+    request_.Swap(tmp);
+    parse_state_ = kParseRequestLine;
   }
 
  private:
-  int checked_index_;
   HttpRequest request_;
-  HttpRequestParseLine line_state_;
   HttpRequestParseState parse_state_;
 };
 

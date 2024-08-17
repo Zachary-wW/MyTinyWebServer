@@ -1,0 +1,92 @@
+#include "acceptor.h"
+
+#include <arpa/inet.h>
+#include <assert.h>
+#include <bits/socket.h>
+#include <fcntl.h>
+#include <netinet/in.h>
+#include <netinet/tcp.h>
+#include <sys/socket.h>
+#include <sys/types.h>
+
+#include <cstring>
+#include <functional>
+
+#include "address.h"
+#include "channel.h"
+
+using namespace tiny_muduo;
+
+Acceptor::Acceptor(EventLoop* loop, const Address& address)
+    : loop_(loop),
+      listenfd_(::socket(AF_INET, SOCK_STREAM | SOCK_NONBLOCK | SOCK_CLOEXEC,
+                         IPPROTO_TCP)),
+      // 占领一个坑位防止出现文件描述符不够的现象
+      idlefd_(::open("/dev/null", O_RDONLY | O_CLOEXEC)),
+      channel_(new Channel(loop_, listenfd_)) {
+    SetSockoptReuseAddr(listenfd_);
+    SetSockoptKeepAlive(listenfd_);
+    BindListenFd(address);
+    channel_->SetReadCallback(std::bind(&Acceptor::NewConnection, this));
+}
+
+Acceptor::~Acceptor() {
+    channel_->DisableAll();
+    loop_->Remove(channel_.get());
+    ::close(listenfd_);
+}
+
+void Acceptor::BindListenFd(const Address& addr) {
+    struct sockaddr_in address;
+    // Set N bytes of S to 0.
+    bzero((char*)&address, sizeof(address));
+    address.sin_family = AF_INET;
+    // INADDR_ANY：Address to accept any incoming messages.
+    address.sin_addr.s_addr = htonl(INADDR_ANY);
+    address.sin_port = htons(addr.port());
+    int ret = bind(listenfd_, (struct sockaddr*)(&address), sizeof(address));
+    assert(ret != -1);
+    (void)ret;
+}
+
+void Acceptor::Listen() {
+    // SOMAXCONN：Maximum queue length specifiable by listen.
+    // listen 的 backlog参数指的是全连接队列的长度
+    // 半连接队列由tcp_max_syn_backlog指定
+    int ret = listen(listenfd_, SOMAXCONN);
+    assert(ret != -1);
+    (void)ret;
+    // 注册读事件 让 main Eventloop监听
+    channel_->EnableReading();
+}
+
+void Acceptor::NewConnection() {
+    struct sockaddr_in client;
+    socklen_t client_addrlength = sizeof(client);
+    // accept4只是比accept多个flag，在这里设置成非阻塞和执行关闭
+    int connfd = ::accept4(listenfd_, (struct sockaddr*)&client,
+                           &client_addrlength, SOCK_NONBLOCK | SOCK_CLOEXEC);
+    if (connfd < 0) {
+        if (errno == EMFILE) {
+            ::close(idlefd_);
+            // 拿到clientfd 随后立即关闭，相当于断开和client的连接
+            idlefd_ = ::accept(listenfd_, NULL, NULL);
+            ::close(idlefd_);
+            // 重新占领坑位
+            idlefd_ = ::open("/dev/null", O_RDONLY | O_CLOEXEC);
+        }
+        return;
+    }
+    assert(connfd > 0);
+    if (SetSockoptKeepAlive(connfd) == -1) {
+        printf("Acceptor::NewConnection SetSockoptKeepAlive failed\n");
+        close(connfd);
+        return;
+    }
+    if (SetSockoptTcpNoDelay(connfd) == -1) {
+        printf("Acceptor::NewConnection SetSockoptTcpNoDelay failed\n");
+        close(connfd);
+        return;
+    }
+    new_connection_callback_(connfd);
+}
