@@ -2,6 +2,8 @@
 
 #include <sys/uio.h>
 
+#include "logging.h"
+
 using namespace tiny_muduo;
 
 int Buffer::ReadFd(int fd) {
@@ -14,15 +16,15 @@ int Buffer::ReadFd(int fd) {
   iv[1].iov_len = sizeof(extrabuf);
   
   const int iovcnt = (writable < static_cast<int>(sizeof(extrabuf)) ? 2 : 1);
-  int readn = readv(fd, iv, iovcnt); // 将fd中的数据写到iv中 返回读取的字节数
+  // 将fd中的数据写到iv中 返回读取的字节数
+  int readn = static_cast<int>(::readv(fd, iv, iovcnt));
 
   if (readn < 0) {
-    assert(readn >= 0);
-  }
-  else if (readn <= writable) {
+    // LOG_ERRNO << "Buffer::ReadFd readv failed";
+  } else if (readn <= writable) {
     write_index_ += readn;
   } else {
-    write_index_ = buffer_.size();
+    write_index_ = static_cast<int>(buffer_.size());
     Append(extrabuf, readn - writable);
   }
 

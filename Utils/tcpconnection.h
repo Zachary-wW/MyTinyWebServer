@@ -2,18 +2,19 @@
 #define TINY_MUDUO_TCPCONNECTION_H_
 
 #include <string.h>
-#include <sys/socket.h>
 #include <sys/types.h>
+#include <sys/socket.h>
 
+#include <string> 
 #include <memory>
-#include <string>
 #include <utility>
 
-#include "buffer.h"
 #include "callback.h"
 #include "channel.h"
+#include "buffer.h"
 #include "httpcontent.h"
 #include "noncopyable.h"
+#include "timestamp.h"
 
 using std::string;
 
@@ -21,75 +22,86 @@ namespace tiny_muduo {
 
 class EventLoop;
 
-class TcpConnection : public std::enable_shared_from_this<TcpConnection>,
-                      NonCopyAble {
-   public:
-    enum ConnectionState { kConnected, kDisconnected };
+class TcpConnection : public std::enable_shared_from_this<TcpConnection>, NonCopyAble {
+ public:
+  enum ConnectionState {
+    kConnecting,
+    kConnected,
+    kDisconnecting,
+    kDisconnected
+  };
 
-    TcpConnection(EventLoop* loop, int connfd);
-    ~TcpConnection();
+  TcpConnection(EventLoop* loop, int connfd, int id);
+  ~TcpConnection();
 
-    void SetConnectionCallback(const ConnectionCallback& callback) {
-        connection_callback_ = callback;
-    }
+  void SetConnectionCallback(const ConnectionCallback& callback) { 
+    connection_callback_ = callback;
+  }
 
-    void SetConnectionCallback(ConnectionCallback&& callback) {
-        connection_callback_ = std::move(callback);
-    }
+  void SetConnectionCallback(ConnectionCallback&& callback) { 
+    connection_callback_ = std::move(callback);
+  }
 
-    void SetMessageCallback(const MessageCallback& callback) {
-        message_callback_ = callback;
-    }
+  void SetMessageCallback(const MessageCallback& callback) {
+    message_callback_ = callback;
+  }
 
-    void SetMessageCallback(MessageCallback&& callback) {
-        message_callback_ = std::move(callback);
-    }
+  void SetMessageCallback(MessageCallback&& callback) {
+    message_callback_ = std::move(callback);
+  }
 
-    void SetCloseCallback(const CloseCallback& callback) {
-        close_callback_ = callback;
-    }
+  void SetCloseCallback(const CloseCallback& callback) {
+    close_callback_ = callback;
+  }
 
-    void SetCloseCallback(CloseCallback&& callback) {
-        close_callback_ = std::move(callback);
-    }
-    // 连接建立时更改连接状态，注册读事件，注册连接回调函数
-    void ConnectionEstablished() {
-        state_ = kConnected;
-        channel_->EnableReading();
-        connection_callback_(shared_from_this(), &input_buffer_);
-    }
+  void SetCloseCallback(CloseCallback&& callback) {
+    close_callback_ = std::move(callback);
+  }
+  // 连接建立时更改连接状态，注册读事件，注册连接回调函数
+  void ConnectionEstablished() {
+    state_ = kConnected;
+    channel_->Tie(shared_from_this());
+    channel_->EnableReading();
+    connection_callback_(shared_from_this(), &input_buffer_);
+  }
 
-    void Shutdown();
-    bool IsShutdown() { return shutdown_state_; }
-    void ConnectionDestructor();
-    void HandleClose();
-    void HandleMessage();
-    void HandleWrite();
-    void Send(Buffer* buffer);
-    void Send(const string& str);
-    void Send(const char* message, int len);
-    void Send(const char* message) { Send(message, strlen(message)); }
+  void Shutdown();  
+  bool IsShutdown() const { return state_ == kDisconnecting; }
+  int GetErrno() const;
+  void ConnectionDestructor();
+  void HandleClose();
+  void HandleError();
+  void HandleMessage();
+  void HandleWrite();
+  void Send(Buffer* buffer);
+  void Send(const string& str);
+  void Send(const char* message, int len);
+  void Send(const char* message) { Send(message, static_cast<int>(strlen(message))); }
+  void UpdateTimestamp(Timestamp now) { timestamp_ = now; }
 
-    int fd() const { return fd_; }
-    EventLoop* loop() const { return loop_; }
-    HttpContent* GetHttpContent() { return &content_; }
+  Timestamp timestamp() const { return timestamp_; }
+  int fd() const { return fd_; }
+  int id() const { return connection_id_; }
+  EventLoop* loop() const { return loop_; }
+  HttpContent* GetHttpContent() { return &content_; }
 
-   private:
-    EventLoop* loop_; // subEventloop
-    int fd_; // 已连接的socketfd
-    ConnectionState state_;
-    std::unique_ptr<Channel> channel_; // 封装fd_
-    Buffer input_buffer_; // 接受缓冲区
-    Buffer output_buffer_; // 发送缓冲区 由于TCP发送缓冲区有限
-    HttpContent content_;
-    bool shutdown_state_;
+ private:
+  EventLoop* loop_; // subEventloop
+  int fd_; // 已连接的socketfd
+  int connection_id_;
+  ConnectionState state_;
+  std::unique_ptr<Channel> channel_; // 封装fd_
+  Buffer input_buffer_; // 接受缓冲区
+  Buffer output_buffer_; // 发送缓冲区 由于TCP发送缓冲区有限
+  HttpContent content_;
+  bool shutdown_state_;
+  Timestamp timestamp_;
 
-    ConnectionCallback connection_callback_;
-    MessageCallback message_callback_;
-    CloseCallback close_callback_;
+  ConnectionCallback connection_callback_;
+  MessageCallback message_callback_;
+  CloseCallback close_callback_;
 };
 
-// TODO
 typedef std::shared_ptr<TcpConnection> TcpconnectionPtr;
 
 }  // namespace tiny_muduo
