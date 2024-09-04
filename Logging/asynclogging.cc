@@ -1,75 +1,77 @@
-#ifndef TINY_MUDUO_ASYNCLOGGING_H_
-#define TINY_MUDUO_ASYNCLOGGING_H_
+#include "asynclogging.h"
 
-#include <vector>
+#include <functional>
+#include <utility>
 #include <memory>
 
-#include "mutex.h"
-#include "condition.h"
-#include "latch.h"
-#include "thread.h"
-#include "logging.h"
-#include "logstream.h"
-#include "noncopyable.h"
-#include "logfile.h"
+using namespace tiny_muduo;
 
-namespace tiny_muduo {
-
-static const double kBufferWriteTimeout = 3.0;
-static const int64_t kSingleFileMaximumSize = 1024 * 1024 * 1024;
-
-class AsyncLogging : public NonCopyAble {
- public:
-  typedef FixedBuffer<kLargeSize> Buffer;
-  typedef std::unique_ptr<Buffer> BufferPtr;
-  typedef std::vector<BufferPtr> BufferVector;
-  typedef std::unique_ptr<LogFile> LogFilePtr;
-
-  AsyncLogging(const char* filepath = nullptr) 
-      : running_(false),
-        filepath_(filepath),
-        mutex_(),
-        cond_(mutex_),
-        latch_(1),
-        thread_(std::bind(&AsyncLogging::ThreadFunc, this), "AsyncLogThread"),
-        current_(new Buffer()),
-        next_(new Buffer()) {
-  }
-
-  ~AsyncLogging() {
-    if (running_) {
-      Stop();
-    } 
-  }
-  
-  void Stop() {
-    running_ = false;
+void AsyncLogging::Append(const char* data, int len) {
+  MutexLockGuard guard(mutex_);
+  if (current_->writablebytes() >= len) {
+    current_->Append(data, len);
+  } else {
+    buffers_to_write_.emplace_back(std::move(current_)); 
+    if (next_) {
+      current_ = std::move(next_);
+    } else {
+      current_.reset(new Buffer());
+    }
     cond_.Notify();
-    thread_.Join();
   }
- 
-  void StartAsyncLogging() {
-    running_ = true;
-    thread_.StartThread(); 
-    latch_.Wait();
+}
+
+void AsyncLogging::Flush() {
+  fflush(stdout);
+}
+
+void AsyncLogging::ThreadFunc() {
+  latch_.CountDown();
+  BufferPtr newbuffer_current(new Buffer());
+  BufferPtr newbuffer_next(new Buffer());
+  LogFilePtr log(new LogFile(filepath_));
+  newbuffer_current->SetBufferZero();
+  newbuffer_next->SetBufferZero();
+  BufferVector buffers;
+
+  while (running_) {
+    {
+      MutexLockGuard guard(mutex_);
+      if (buffers_to_write_.empty()) {
+        cond_.WaitForFewSeconds(kBufferWriteTimeout);
+      }
+
+      buffers_to_write_.emplace_back(std::move(current_));
+      buffers.swap(buffers_to_write_);
+      current_ = std::move(newbuffer_current);
+      if (!next_) {
+        next_ = std::move(newbuffer_next);
+      }
+    }
+    
+    for (const auto& buffer : buffers) {
+      log->Write(buffer->data(), buffer->len());
+    }
+
+    if (log->writtenbytes() >= kSingleFileMaximumSize) {
+      log.reset(new LogFile(filepath_));
+    } 
+    
+    if (buffers.size() > 2) {
+      buffers.resize(2);
+    }
+
+    if (!newbuffer_current) {
+      newbuffer_current = std::move(buffers.back());
+      buffers.pop_back();
+      newbuffer_current->SetBufferZero();
+    }
+
+    if (!newbuffer_next) {
+      newbuffer_current = std::move(buffers.back());
+      buffers.pop_back();
+      newbuffer_current->SetBufferZero();
+    }
+    buffers.clear();
   }
-  
-  void Append(const char* data, int len);
-  void Flush();
-  void ThreadFunc();
-
- private:
-  bool running_;
-  const char* filepath_;
-  MutexLock mutex_;
-  Condition cond_;
-  Latch latch_;
-  Thread thread_;
-  BufferPtr current_;
-  BufferPtr next_; 
-  BufferVector buffers_to_write_; 
-};
-
-} // namespace tiny_muduo
-
-#endif
+}

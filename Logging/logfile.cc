@@ -36,3 +36,4 @@ void LogFile::Write(const char* data, int len) {
     lastflush_ = now;
   }
 }
+
