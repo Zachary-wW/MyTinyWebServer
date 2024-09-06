@@ -3,12 +3,13 @@
 
 namespace tiny_muduo {
 
+// HTTP请求状态
 enum HttpRequestParseState {
-  kParseRequestLine,
-  kParseHeaders,
-  kParseBody,
-  kParseGotCompleteRequest,
-  kParseErrno,
+    kParseRequestLine,
+    kParseHeaders,
+    kParseBody,
+    kParseGotCompleteRequest, // 解析请求完成
+    kParseErrno,
 };
 
 }

@@ -71,7 +71,7 @@ class TimerQueue : public NonCopyAble {
         }
         // 如果重新插入了定时器，需要继续重置timerfd
         if (!timers_.empty()) {
-            ResetTimer(timers_.begin()->second);
+            ResetTimerfd(timers_.begin()->second);
         }
     }
 
@@ -93,11 +93,11 @@ class TimerQueue : public NonCopyAble {
     void AddTimerInLoop(Timer* timer) {
         bool reset_instantly = Insert(timer);
         if (reset_instantly) {
-            ResetTimer(timer);
+            ResetTimerfd(timer);
         }
     }
 
-    void ResetTimer(Timer* timer);
+    void ResetTimerfd(Timer* timer);
     void AddTimer(Timestamp timestamp, BasicFunc&& cb, double interval);
 
    private:

@@ -56,7 +56,7 @@ void TimerQueue::AddTimer(Timestamp timestamp, BasicFunc&& cb, double interval) 
 }
 
 // 重置timerfd
-void TimerQueue::ResetTimer(Timer* timer) {
+void TimerQueue::ResetTimerfd(Timer* timer) {
   // itimerspec: POSIX.1b structure for timer start values and intervals
   struct itimerspec new_;
   struct itimerspec old_;
@@ -75,7 +75,7 @@ void TimerQueue::ResetTimer(Timer* timer) {
   new_.it_value.tv_nsec = static_cast<long>(
       (micro_seconds_dif % kMicrosecond2Second) * 1000); // 将差值的纳秒部分（微秒的小数部分）
   int ret = ::timerfd_settime(timerfd_, 0, &new_, &old_);
-  /**
+  /** 
    * 我们使用此函数启动或停止定时器。
     fd：timerfd_create()返回的文件描述符
     flags：0表示相对定时器，TFD_TIMER_ABSTIME表示绝对定时器

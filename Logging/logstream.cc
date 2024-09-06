@@ -10,12 +10,12 @@ void FixedBuffer<SIZE>::CookieEnd() {}
 
 template <int SIZE>
 FixedBuffer<SIZE>::FixedBuffer() : cur_(buf_) {
-  SetCookie(CookieStart); 
+    SetCookie(CookieStart);
 }
 
 template <int SIZE>
 FixedBuffer<SIZE>::~FixedBuffer() {
-  SetCookie(CookieEnd);
+    SetCookie(CookieEnd);
 }
 
 template class FixedBuffer<kLargeSize>;
