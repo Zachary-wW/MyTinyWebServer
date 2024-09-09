@@ -8,6 +8,7 @@ using namespace tiny_muduo;
 
 bool Condition::WaitForFewSeconds(double seconds) {
     struct timespec time;
+    // 调用 clock_gettime 函数获取当前的单调时间（不受系统时间调整影响的时间）
     clock_gettime(CLOCK_MONOTONIC, &time);
 
     const int64_t kNanoSecondsPerSecond = 1000000000;
