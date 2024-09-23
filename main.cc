@@ -64,8 +64,8 @@ void HttpResponseCallback(const HttpRequest& request, HttpResponse& response) {
 }
 
 int main(int argc, char* argv[]) {
-  if (argc <= 1) {
-    printf("Usage: %s port\n", argv[0]);
+  if (argc <= 2) {
+    printf("Usage: %s port ; thread nums\n", argv[0]);
     return 0;
   }
 
@@ -81,7 +81,9 @@ int main(int argc, char* argv[]) {
   EventLoop loop;
   Address listen_address(argv[1]);
   HttpServer server(&loop, listen_address);
-  server.SetThreadNums(4);
+  string thread_nums = static_cast<string>(argv[2]);
+  std::cout << stoi(thread_nums) << std::endl;
+  server.SetThreadNums(stoi(thread_nums));
   server.SetHttpResponseCallback(HttpResponseCallback);
   server.Start();
   loop.Loop();
