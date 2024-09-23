@@ -19,4 +19,14 @@
 
 ## 代码统计
 
-<img src="/Users/weizhihao/Library/Application Support/typora-user-images/image-20240923143017370.png" alt="image-20240923143017370" style="zoom:50%;" />
+| Language     | files | blank | comment | code     |
+| ------------ | ----- | ----- | ------- | -------- |
+| C++          | 25    | 405   | 235     | 1762     |
+| C/C++ Header | 30    | 428   | 105     | 1470     |
+| C            | 1     | 114   | 50      | 507      |
+| make         | 1     | 242   | 106     | 460      |
+| CMake        | 9     | 70    | 26      | 401      |
+| JSON         | 1     | 0     | 0       | 51       |
+| Bourne Shell | 1     | 4     | 0       | 11       |
+| **SUM**      | 68    | 1263  | 522     | **4662** |
+
